@@ -1,6 +1,8 @@
 import os
 import pickle
 import time
+import json
+import argparse
 from seleniumwire import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -97,7 +99,7 @@ class Parser:
         except Exception as e:
             print(f"Ошибка при авторизации: {e}")
             
-    def parse_data(self, wallet_data):
+    def parse_data(self, wallet_data, start_iteration=1):
         """Метод для парсинга данных"""
         # Здесь реализуйте вашу логику парсинга
         
@@ -110,8 +112,16 @@ class Parser:
         
         time.sleep(5)
         
-        # Добавляем счетчик итераций
-        iteration_counter = 1
+        # Загружаем состояние
+        state = load_state()
+        
+        # Используем либо сохраненный счетчик, либо указанный в start_iteration
+        iteration_counter = max(state["iteration_counter"], start_iteration)
+        
+        # Пропускаем записи до нужной итерации
+        if start_iteration > 1:
+            print(f"Пропускаем {start_iteration - 1} записей...")
+            wallet_data = wallet_data[start_iteration - 1:]
         
         for wallet_address, amount in wallet_data:
             # Обработка суммы: убираем запятые и дробную часть
@@ -126,6 +136,11 @@ class Parser:
             if amount_value > 500000:
                 print(f"#{iteration_counter} Пропускаем адрес {wallet_address} с суммой {amount_value} (больше 500000)")
                 iteration_counter += 1
+                
+                # Сохраняем текущее состояние
+                state["iteration_counter"] = iteration_counter
+                save_state(state)
+                
                 continue
                 
             search_field = self.driver.find_element(By.XPATH, '''//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[1]/div[1]/div[1]/div/div/div/div/div[2]/div[2]/div/div/div/form/div[1]/div/div/div/div/div[2]/div/input''')
@@ -163,6 +178,10 @@ class Parser:
             # Увеличиваем счетчик после обработки каждого кошелька
             iteration_counter += 1
             
+            # Сохраняем текущее состояние
+            state["iteration_counter"] = iteration_counter
+            save_state(state)
+            
     def close(self):
         """Закрытие браузера"""
         if self.driver:
@@ -197,7 +216,39 @@ class Parser:
             return []
             
             
+def load_state():
+    """Загрузка состояния из JSON-файла"""
+    state_file = 'parser_state.json'
+    default_state = {"iteration_counter": 1}
+    
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Ошибка при загрузке состояния: {e}")
+            return default_state
+    else:
+        # Создаем файл с состоянием по умолчанию
+        with open(state_file, 'w') as f:
+            json.dump(default_state, f, indent=4)
+        return default_state
+        
+def save_state(state):
+    """Сохранение состояния в JSON-файл"""
+    state_file = 'parser_state.json'
+    try:
+        with open(state_file, 'w') as f:
+            json.dump(state, f, indent=4)
+    except Exception as e:
+        print(f"Ошибка при сохранении состояния: {e}")
+
 def main():
+    # Парсим аргументы командной строки
+    arg_parser = argparse.ArgumentParser(description='Twitter парсер кошельков')
+    arg_parser.add_argument('--start', type=int, default=1, help='Начать с указанной итерации')
+    args = arg_parser.parse_args()
+
     # Настройка прокси из файла
     try:
         with open('proxy.txt', 'r') as proxy_file:
@@ -236,7 +287,8 @@ def main():
         return
     
     try:
-        parser.parse_data(wallet_data)
+        # Передаем начальную итерацию
+        parser.parse_data(wallet_data, args.start)
         
     finally:
         parser.close()

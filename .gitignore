@@ -41,6 +41,9 @@ chrome-data/
 # Proxy configuration
 proxy.txt
 
+# Parser state
+parser_state.json
+
 # IDE files
 .idea/
 .vscode/
