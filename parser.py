@@ -110,6 +110,9 @@ class Parser:
         
         time.sleep(5)
         
+        # Добавляем счетчик итераций
+        iteration_counter = 1
+        
         for wallet_address, amount in wallet_data:
             # Обработка суммы: убираем запятые и дробную часть
             amount_str = str(amount).replace(",", "")
@@ -121,7 +124,8 @@ class Parser:
             
             # Пропускаем, если сумма больше 500000
             if amount_value > 500000:
-                print(f"Пропускаем адрес {wallet_address} с суммой {amount_value} (больше 500000)")
+                print(f"#{iteration_counter} Пропускаем адрес {wallet_address} с суммой {amount_value} (больше 500000)")
+                iteration_counter += 1
                 continue
                 
             search_field = self.driver.find_element(By.XPATH, '''//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[1]/div[1]/div[1]/div/div/div/div/div[2]/div[2]/div/div/div/form/div[1]/div/div/div/div/div[2]/div/input''')
@@ -143,20 +147,22 @@ class Parser:
                 elements = self.driver.find_elements(By.XPATH, '//*[@aria-label="Timeline: Search timeline"]')
                 if not elements:
                     with open('output.csv', 'a', encoding='utf-8') as f:
-                        f.write(f'address: {wallet_address} : {0}\n')
-                        print(f'address: {wallet_address} : {0}')
+                        f.write(f'#{iteration_counter} address: {wallet_address} : {0}\n')
+                        print(f'#{iteration_counter} address: {wallet_address} : {0}')
                         
                     time.sleep(1)
-                    continue
                 else:
                     res = elements[0].find_element(By.XPATH, './*').find_elements(By.XPATH, './*')
                     with open('output.csv', 'a', encoding='utf-8') as f:
-                        f.write(f'address: {wallet_address} : {len(res)-1}\n')
-                        print(f'address: {wallet_address} : {len(res)-1}')
+                        f.write(f'#{iteration_counter} address: {wallet_address} : {len(res)-1}\n')
+                        print(f'#{iteration_counter} address: {wallet_address} : {len(res)-1}')
                         
             except Exception as e:
-                print(f'error: {e}')
-                
+                print(f'#{iteration_counter} error: {e}')
+            
+            # Увеличиваем счетчик после обработки каждого кошелька
+            iteration_counter += 1
+            
     def close(self):
         """Закрытие браузера"""
         if self.driver:
