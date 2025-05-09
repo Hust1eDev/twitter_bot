@@ -192,10 +192,27 @@ class Parser:
             
             
 def main():
-    # Настройка прокси
-    proxy = "77.221.150.148:52727"  # Замените на ваш прокси
-    proxy_username = "n6DiSlrQV7"  # Замените на ваше имя пользователя
-    proxy_password = "PbNuwCunx3"  # Замените на ваш пароль
+    # Настройка прокси из файла
+    try:
+        with open('proxy.txt', 'r') as proxy_file:
+            proxy_line = proxy_file.read().strip()
+            # Формат строки: username:password@address:port
+            if '@' in proxy_line:
+                auth, proxy = proxy_line.split('@', 1)
+                if ':' in auth:
+                    proxy_username, proxy_password = auth.split(':', 1)
+                else:
+                    proxy_username = auth
+                    proxy_password = ''
+            else:
+                proxy = proxy_line
+                proxy_username = None
+                proxy_password = None
+    except FileNotFoundError:
+        print("Файл proxy.txt не найден. Используются значения по умолчанию.")
+        proxy = None
+        proxy_username = None
+        proxy_password = None
     
     parser = Parser(
         proxy=proxy,

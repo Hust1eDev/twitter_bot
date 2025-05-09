@@ -38,6 +38,9 @@ chrome-data/
 # CSV files (comment if you want to include these in the repo)
 *.csv
 
+# Proxy configuration
+proxy.txt
+
 # IDE files
 .idea/
 .vscode/
