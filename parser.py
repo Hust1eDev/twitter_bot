@@ -21,6 +21,7 @@ class Parser:
         self.proxy = proxy
         self.proxy_username = proxy_username
         self.proxy_password = proxy_password
+        self.chrome_data_dir = 'chrome-data'
         
     def setup_driver(self):
         """Настройка и инициализация драйвера"""
@@ -99,6 +100,32 @@ class Parser:
         except Exception as e:
             print(f"Ошибка при авторизации: {e}")
             
+    def reset_session(self):
+        """Очистка сессии: удаление cookies.pkl и директории chrome-data"""
+        print("Удаление файлов сессии для сброса спам-блока...")
+        
+        # Закрываем текущий драйвер
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
+            
+        # Удаляем файл cookies.pkl
+        if os.path.exists(self.cookies_file):
+            try:
+                os.remove(self.cookies_file)
+                print(f"Файл {self.cookies_file} успешно удален")
+            except Exception as e:
+                print(f"Ошибка при удалении файла {self.cookies_file}: {e}")
+        
+        # Удаляем директорию chrome-data
+        if os.path.exists(self.chrome_data_dir):
+            try:
+                import shutil
+                shutil.rmtree(self.chrome_data_dir)
+                print(f"Директория {self.chrome_data_dir} успешно удалена")
+            except Exception as e:
+                print(f"Ошибка при удалении директории {self.chrome_data_dir}: {e}")
+    
     def parse_data(self, wallet_data, start_iteration=1):
         """Метод для парсинга данных"""
         # Здесь реализуйте вашу логику парсинга
@@ -123,7 +150,11 @@ class Parser:
             print(f"Пропускаем {start_iteration - 1} записей...")
             wallet_data = wallet_data[start_iteration - 1:]
         
-        for wallet_address, amount in wallet_data:
+        current_wallet_index = 0
+        
+        while current_wallet_index < len(wallet_data):
+            wallet_address, amount = wallet_data[current_wallet_index]
+            
             # Обработка суммы: убираем запятые и дробную часть
             amount_str = str(amount).replace(",", "")
             if "." in amount_str:
@@ -141,26 +172,60 @@ class Parser:
                 state["iteration_counter"] = iteration_counter
                 save_state(state)
                 
+                current_wallet_index += 1
                 continue
                 
-            search_field = self.driver.find_element(By.XPATH, '''//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[1]/div[1]/div[1]/div/div/div/div/div[2]/div[2]/div/div/div/form/div[1]/div/div/div/div/div[2]/div/input''')
-            time.sleep(1)
-            
-            actions = ActionChains(self.driver)
-            actions.click(search_field)
-            actions.key_down(Keys.COMMAND).send_keys("a").key_up(Keys.COMMAND)
-            actions.send_keys(Keys.BACKSPACE)
-            actions.perform()
-            time.sleep(1)
-            
-            search_field.send_keys(wallet_address)
-            search_field.send_keys(Keys.ENTER)
-            
-            time.sleep(5)
-            
             try:
+                search_field = self.driver.find_element(By.XPATH, '''//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[1]/div[1]/div[1]/div/div/div/div/div[2]/div[2]/div/div/div/form/div[1]/div/div/div/div/div[2]/div/input''')
+                time.sleep(1)
+                
+                actions = ActionChains(self.driver)
+                actions.click(search_field)
+                actions.key_down(Keys.COMMAND).send_keys("a").key_up(Keys.COMMAND)
+                actions.send_keys(Keys.BACKSPACE)
+                actions.perform()
+                time.sleep(1)
+                
+                search_field.send_keys(wallet_address)
+                search_field.send_keys(Keys.ENTER)
+                
+                time.sleep(5)
+                
                 elements = self.driver.find_elements(By.XPATH, '//*[@aria-label="Timeline: Search timeline"]')
                 if not elements:
+                    
+                    spam_block = self.driver.find_elements(By.XPATH, '/html/body/div[1]/div/div/div[2]/main/div/div/div/div/div/div[3]/div/button/div/span/span')
+                    if spam_block:
+                        try:
+                            if spam_block[0].text == 'Retry':
+                                print(f'#{iteration_counter} Обнаружена спам-блокировка. Перезагрузка сессии...')
+                                
+                                # Сохраняем текущее состояние перед сбросом
+                                state["iteration_counter"] = iteration_counter
+                                save_state(state)
+                                
+                                # Сбрасываем сессию
+                                self.reset_session()
+                                
+                                # Выполняем повторную авторизацию
+                                self.login(url="https://x.com/home", username="", password="")
+                                
+                                # Обновляем UI перед повторным поиском
+                                time.sleep(5)
+                                
+                                # делаем первый поиск после авторизации
+                                first_search = self.driver.find_element(By.XPATH, '''//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div[1]/div/div/div/form/div[1]/div/div/div/div/div[2]/div/input''')
+                                first_search.send_keys("1")
+                                first_search.send_keys(Keys.ENTER)
+                                
+                                time.sleep(5)
+                                
+                                # Продолжаем с текущего адреса (не увеличиваем индекс)
+                                continue
+                        except Exception as e:
+                            print(f"#{iteration_counter} Ошибка при обработке спам-блока: {e}")
+                            pass
+                    
                     with open('output.csv', 'a', encoding='utf-8') as f:
                         f.write(f'#{iteration_counter} address: {wallet_address} : {0}\n')
                         print(f'#{iteration_counter} address: {wallet_address} : {0}')
@@ -174,6 +239,37 @@ class Parser:
                         
             except Exception as e:
                 print(f'#{iteration_counter} error: {e}')
+                
+                # Проверяем, возможно это ошибка из-за спам-блока
+                try:
+                    spam_block = self.driver.find_elements(By.XPATH, '/html/body/div[1]/div/div/div[2]/main/div/div/div/div/div/div[3]/div/button/div/span/span')
+                    if spam_block and spam_block[0].text == 'Retry':
+                        print(f'#{iteration_counter} Обнаружена спам-блокировка после ошибки. Перезагрузка сессии...')
+                        
+                        # Сохраняем текущее состояние перед сбросом
+                        state["iteration_counter"] = iteration_counter
+                        save_state(state)
+                        
+                        # Сбрасываем сессию
+                        self.reset_session()
+                        
+                        # Выполняем повторную авторизацию
+                        self.login(url="https://x.com/home", username="", password="")
+                        
+                        # Обновляем UI перед повторным поиском
+                        time.sleep(5)
+                        
+                        # делаем первый поиск после авторизации
+                        first_search = self.driver.find_element(By.XPATH, '''//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div[1]/div/div/div/form/div[1]/div/div/div/div/div[2]/div/input''')
+                        first_search.send_keys("1")
+                        first_search.send_keys(Keys.ENTER)
+                        
+                        time.sleep(5)
+                        
+                        # Продолжаем с текущего адреса (не увеличиваем индекс)
+                        continue
+                except:
+                    pass
             
             # Увеличиваем счетчик после обработки каждого кошелька
             iteration_counter += 1
@@ -182,6 +278,9 @@ class Parser:
             state["iteration_counter"] = iteration_counter
             save_state(state)
             
+            # Переходим к следующему кошельку
+            current_wallet_index += 1
+    
     def close(self):
         """Закрытие браузера"""
         if self.driver:
