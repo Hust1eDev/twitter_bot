@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Chrome data directory (used by selenium)
+chrome-data/
+
+# Cookie files
+*.pkl
+
+# CSV files (comment if you want to include these in the repo)
+*.csv
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
