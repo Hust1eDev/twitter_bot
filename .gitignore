@@ -44,6 +44,9 @@ proxy.txt
 # Parser state
 parser_state.json
 
+# Account data
+accounts.txt
+
 # IDE files
 .idea/
 .vscode/

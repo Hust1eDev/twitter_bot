@@ -3,6 +3,7 @@ import pickle
 import time
 import json
 import argparse
+import random
 from seleniumwire import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -73,7 +74,48 @@ class Parser:
             return True
         return False
     
-    def login(self, url, username, password):
+    def read_account_data(self):
+        """Чтение данных аккаунта из файла accounts.txt"""
+        account_file = 'accounts.txt'
+        if not os.path.exists(account_file):
+            print(f"Файл {account_file} не найден!")
+            return None
+            
+        try:
+            with open(account_file, 'r', encoding='utf-8') as f:
+                accounts = f.readlines()
+                
+            if not accounts:
+                print("Файл accounts.txt пуст!")
+                return None
+                
+            # Выбор случайного аккаунта из файла
+            account_data = random.choice(accounts).strip()
+            
+            # Парсинг данных аккаунта
+            parts = account_data.split(':')
+            if len(parts) < 7:
+                print(f"Неверный формат данных аккаунта: {account_data}")
+                return None
+                
+            login = parts[0]
+            password = parts[1]
+            
+            # 2FA данные
+            # Извлекаем 2FA токен (в формате 2fa.fb.rip/ABCDEFGHIJKL:xxxxxxxx)
+            twofa_info = parts[5]
+            
+            return {
+                'login': login,
+                'password': password,
+                'twofa': twofa_info
+            }
+            
+        except Exception as e:
+            print(f"Ошибка при чтении данных аккаунта: {e}")
+            return None
+
+    def login(self, url, username=None, password=None):
         """Авторизация на сайте"""
         if not self.driver:
             self.setup_driver()
@@ -85,20 +127,88 @@ class Parser:
             self.driver.refresh()
             # Проверяем, что авторизация прошла успешно
             # Здесь нужно добавить проверку на успешную авторизацию
-            print("Авторизация прошла успешно")
+            print("Авторизация через cookies прошла успешно")
             return
             
-        # Если куки нет или они не работают, выполняем ручную авторизацию
+        # Если куки нет или они не работают, выполняем автоматическую авторизацию
         try:
+            # Получаем данные аккаунта из файла
+            account_data = self.read_account_data()
+            if not account_data:
+                print("Не удалось получить данные аккаунта. Ожидание ручной авторизации...")
+                time.sleep(30)  # Увеличиваем время ожидания для ручной авторизации
+                return
+                
+            # Используем данные из файла или параметры функции
+            login_username = username or account_data['login']
+            login_password = password or account_data['password']
+            twofa_info = account_data.get('twofa', '')
             
-            # Ждем успешной авторизации
+            print(f"Выполняем автоматическую авторизацию с логином: {login_username}")
+            
+            # Ждем загрузки страницы авторизации
+            time.sleep(3)
+            
+            # Ввод логина (селектор нужно заполнить)
+            username_input = self.driver.find_element(By.XPATH, '...')  # Селектор для поля логина
+            username_input.clear()
+            username_input.send_keys(login_username)
+            time.sleep(1)
+            
+            # Клик по кнопке "Далее" (селектор нужно заполнить)
+            next_button = self.driver.find_element(By.XPATH, '...')  # Селектор для кнопки "Далее"
+            next_button.click()
+            time.sleep(2)
+            
+            # Ввод пароля (селектор нужно заполнить)
+            password_input = self.driver.find_element(By.XPATH, '...')  # Селектор для поля пароля
+            password_input.clear()
+            password_input.send_keys(login_password)
+            time.sleep(1)
+            
+            # Клик по кнопке "Войти" (селектор нужно заполнить)
+            login_button = self.driver.find_element(By.XPATH, '...')  # Селектор для кнопки "Войти"
+            login_button.click()
+            time.sleep(3)
+            
+            # Обработка 2FA, если требуется
+            try:
+                twofa_input = self.driver.find_element(By.XPATH, '...')  # Селектор для поля 2FA
+                
+                if twofa_info:
+                    # Здесь можно добавить логику для получения кода 2FA из twofa_info
+                    # Например, обращение к API сервиса 2FA
+                    twofa_code = "123456"  # Заглушка, нужно реализовать получение кода
+                    
+                    twofa_input.clear()
+                    twofa_input.send_keys(twofa_code)
+                    time.sleep(1)
+                    
+                    # Клик по кнопке подтверждения 2FA (селектор нужно заполнить)
+                    twofa_button = self.driver.find_element(By.XPATH, '...')  # Селектор для кнопки подтверждения 2FA
+                    twofa_button.click()
+                    time.sleep(3)
+            except Exception as e:
+                print(f"2FA не запрошен или ошибка при вводе: {e}")
+            
+            # Ждем полной загрузки после авторизации
             time.sleep(5)
-            print("Авторизация прошла успешно")
-            # Сохраняем куки после успешной авторизации
-            self.save_cookies()
             
+            # Проверка успешности авторизации
+            try:
+                # Проверка наличия элемента, доступного только авторизованным пользователям (селектор нужно заполнить)
+                self.driver.find_element(By.XPATH, '...')  # Селектор для элемента на главной странице
+                print("Авторизация прошла успешно")
+                
+                # Сохраняем куки после успешной авторизации
+                self.save_cookies()
+            except Exception as e:
+                print(f"Возможно, авторизация не удалась: {e}")
+                
         except Exception as e:
-            print(f"Ошибка при авторизации: {e}")
+            print(f"Ошибка при автоматической авторизации: {e}")
+            print("Ожидание ручной авторизации...")
+            time.sleep(30)  # Увеличиваем время ожидания для ручной авторизации
             
     def reset_session(self):
         """Очистка сессии: удаление cookies.pkl и директории chrome-data"""
